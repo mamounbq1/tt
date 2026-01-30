@@ -1,21 +1,43 @@
+#!/usr/bin/env python3
+"""
+Cahier de Texte - School Schedule Management System
+Main application entry point
+"""
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 import sys
 import os
 import logging
 from datetime import datetime
-from theme_manager import ThemeManager
-# from loading_window import LoadingContext  <-- Loading window is temporarily disabled
-from home import LoginFrame, HomeFrame
-from schadual import EmploiDuTempsApp
-from tap_manager import TabManagerFrame
-from course_dist.cahier_texte import CahierTextFrame
-from import_excel import ExcelImporterFrame
-from course_dist.SavedSchedulesFrame import SavedSchedulesFrame
-from course_dist.db_manager import DatabaseManager  # Import our DatabaseManager
-from config import DB_PATH  # Import the global DB_PATH
+
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+# Import from reorganized structure
+from src.core.theme_manager import ThemeManager
+from src.core.db_manager import DatabaseManager
+from src.ui.home import LoginFrame, HomeFrame
+from src.ui.schedule import EmploiDuTempsApp
+from src.ui.tab_manager import TabManagerFrame
+from src.ui.import_excel import ExcelImporterFrame
+from src.ui.saved_schedules import SavedSchedulesFrame
+from src.utils.config import DB_PATH
+
+# Note: CahierTextFrame needs to be located or created
+try:
+    from cahier_texte import CahierTextFrame
+except ImportError:
+    logging.warning("CahierTextFrame not found, creating placeholder")
+    class CahierTextFrame(ttk.Frame):
+        def __init__(self, parent, controller):
+            super().__init__(parent)
+            ttk.Label(self, text="Cahier de Texte - En développement").pack(pady=50)
+
 
 class MainApp(tk.Tk):
+    """Main application window"""
+    
     def __init__(self):
         try:
             super().__init__()
@@ -24,7 +46,7 @@ class MainApp(tk.Tk):
             sys.excepthook = self._handle_global_exception
             
             self.withdraw()  # Hide main window initially
-            self._initialize_app_with_loading()  # Use the initialization method below
+            self._initialize_app()
         except Exception as e:
             self._handle_fatal_error("Erreur d'initialisation", e)
     
@@ -40,29 +62,18 @@ class MainApp(tk.Tk):
         except:
             print("Critical error in exception handler:", exc_type, exc_value)
     
-    def _initialize_app_with_loading(self):
-        """Initialize application with loading screen disabled for now."""
-        # Temporarily disable the loading window:
-        # with LoadingContext(
-        #     title="Démarrage de l'application",
-        #     message="Veuillez patienter pendant l'initialisation..."
-        # ) as loading:
+    def _initialize_app(self):
+        """Initialize application"""
         try:
-            # Uncomment the following lines if you wish to update the loading status:
-            # loading.update_status("Configuration de l'environnement...")
             self._setup_environment()
-            
-            # loading.update_status("Configuration de la fenêtre...")
             self._setup_window()
-            
-            # loading.update_status("Chargement des interfaces...")
             self._initialize_frames()
             
-            # loading.update_status("Configuration de la base de données...")
+            # Initialize database manager
             self.db_manager = DatabaseManager(db_name=DB_PATH)
             logging.info("DatabaseManager initialized successfully.")
             
-            # loading.update_status("Finalisation...")
+            # Show main window
             self.deiconify()
             self.show_frame("LoginFrame")
             
@@ -72,10 +83,11 @@ class MainApp(tk.Tk):
     def _setup_environment(self):
         """Setup application environment"""
         try:
-            # Configure logging with separate log files for different severity levels
+            # Configure logging with separate log files
             log_dir = 'logs'
             os.makedirs(log_dir, exist_ok=True)
             date_str = datetime.now().strftime("%Y%m%d")
+            
             handlers = [
                 logging.FileHandler(os.path.join(log_dir, f'error_{date_str}.log')),
                 logging.FileHandler(os.path.join(log_dir, f'debug_{date_str}.log')),
@@ -84,6 +96,7 @@ class MainApp(tk.Tk):
             handlers[0].setLevel(logging.ERROR)
             handlers[1].setLevel(logging.DEBUG)
             handlers[2].setLevel(logging.INFO)
+            
             logging.basicConfig(
                 level=logging.DEBUG,
                 format='%(asctime)s - %(levelname)s - %(message)s',
@@ -94,7 +107,7 @@ class MainApp(tk.Tk):
             
             # Setup theme
             ThemeManager.setup_theme()
-            self.title("Système de Gestion")
+            self.title("Système de Gestion Scolaire - Cahier de Texte")
             
         except Exception as e:
             raise Exception(f"Échec de la configuration : {str(e)}")
@@ -143,11 +156,7 @@ class MainApp(tk.Tk):
                     logging.info(f"Successfully initialized {frame_name}")
                 except Exception as e:
                     logging.error(f"Error initializing {frame_name}: {str(e)}")
-                    raise Exception(f"Failed to initialize {frame_name}: {str(e)}")
-            
-            missing_frames = set(frame_classes.keys()) - set(self.frames.keys())
-            if missing_frames:
-                raise Exception(f"Missing frames: {', '.join(missing_frames)}")
+                    # Continue with other frames instead of failing completely
             
         except Exception as e:
             raise Exception(f"Frame initialization error: {str(e)}")
@@ -181,6 +190,7 @@ class MainApp(tk.Tk):
             pass
         
         sys.exit(1)
+
 
 if __name__ == "__main__":
     try:

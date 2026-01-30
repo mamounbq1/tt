@@ -3,7 +3,7 @@ import sqlite3
 import tkinter as tk
 from tkinter import Toplevel, messagebox
 from tkcalendar import Calendar
-from config import DB_PATH  # Use the shared database path
+from src.utils.config import DB_PATH  # Use the shared database path
 
 def open_date_entry_window():
     top = Toplevel()
