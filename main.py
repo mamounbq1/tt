@@ -24,15 +24,8 @@ from src.ui.import_excel import ExcelImporterFrame
 from src.ui.saved_schedules import SavedSchedulesFrame
 from src.utils.config import DB_PATH
 
-# Note: CahierTextFrame needs to be located or created
-try:
-    from cahier_texte import CahierTextFrame
-except ImportError:
-    logging.warning("CahierTextFrame not found, creating placeholder")
-    class CahierTextFrame(ttk.Frame):
-        def __init__(self, parent, controller):
-            super().__init__(parent)
-            ttk.Label(self, text="Cahier de Texte - En développement").pack(pady=50)
+# Import CahierTextFrame wrapper
+from src.ui.cahier_text_frame import CahierTextFrame
 
 
 class MainApp(tk.Tk):
