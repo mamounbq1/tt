@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 # Import from reorganized structure
 from src.core.theme_manager import ThemeManager
 from src.core.db_manager import DatabaseManager
-from src.ui.home import LoginFrame, HomeFrame
+from src.ui.home import HomeFrame  # Only import HomeFrame, skip LoginFrame
 from src.ui.schedule import EmploiDuTempsApp
 from src.ui.tab_manager import TabManagerFrame
 from src.ui.import_excel import ExcelImporterFrame
@@ -73,9 +73,9 @@ class MainApp(tk.Tk):
             self.db_manager = DatabaseManager(db_name=DB_PATH)
             logging.info("DatabaseManager initialized successfully.")
             
-            # Show main window
+            # Show main window - Skip login and go directly to HomeFrame
             self.deiconify()
-            self.show_frame("LoginFrame")
+            self.show_frame("HomeFrame")
             
         except Exception as e:
             raise Exception(f"Échec de l'initialisation : {str(e)}")
@@ -139,7 +139,6 @@ class MainApp(tk.Tk):
         try:
             self.frames = {}
             frame_classes = {
-                'LoginFrame': LoginFrame,
                 'HomeFrame': HomeFrame,
                 'EmploiDuTempsApp': EmploiDuTempsApp,
                 'TabManagerFrame': TabManagerFrame,
