@@ -2,7 +2,7 @@ from tkinter import ttk
 import sqlite3
 import tkinter as tk
 from tkinter import Toplevel, messagebox
-from config import DB_PATH  # Import the shared database path
+from src.utils.config import DB_PATH  # Import the shared database path
 
 def create_module_window():
     top = Toplevel()
