@@ -752,7 +752,6 @@ if __name__ == "__main__":
 
 
 
-check the logs.")
 
 
 
