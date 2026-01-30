@@ -2,7 +2,7 @@ import sqlite3
 import logging
 from datetime import datetime
 import os
-from config import DB_PATH  # Import the global database path
+from src.utils.config import DB_PATH  # Import the global database path
 
 class DatabaseManager:
     """Handles database operations for the schedule management system."""
@@ -146,6 +146,16 @@ class DatabaseManager:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL UNIQUE,
                 description TEXT
+            )""",
+            """CREATE TABLE IF NOT EXISTS class_course_progress (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                class_id INTEGER NOT NULL,
+                last_course_id INTEGER,
+                last_week INTEGER,
+                year INTEGER,
+                FOREIGN KEY (last_course_id) REFERENCES ma_table(id),
+                FOREIGN KEY (class_id) REFERENCES classes(id),
+                UNIQUE(class_id, last_week, year)
             )"""
         ]
 

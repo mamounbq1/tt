@@ -2,13 +2,14 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import logging
 from datetime import datetime, timedelta
-from db_manager import DatabaseManager
-from course_distribution import CourseDistributionManager
-from constants import (
+from src.core.db_manager import DatabaseManager
+from src.core.course_distribution import CourseDistributionManager
+from src.utils.constants import (
     COLORS, MORNING_SLOTS, AFTERNOON_SLOTS, DAYS,
     get_school_year, format_week_text, get_week_dates
 )
-from pdf_generator import generate_pdf
+from src.utils.pdf_generator import generate_pdf
+from src.utils.config import DB_PATH
 
 # Configure logging
 logging.basicConfig(
@@ -25,7 +26,7 @@ class CahierTextApp:
         
         self.db = DatabaseManager()
         logging.info("Initializing CourseDistributionManager...")
-        self.course_distributor = CourseDistributionManager("cahier_texte.db")  # Ensure the DB path is correct
+        self.course_distributor = CourseDistributionManager(DB_PATH)  # Ensure the DB path is correct
         logging.info("CourseDistributionManager initialized successfully.")
         
         self.cells = {}
@@ -748,6 +749,10 @@ if __name__ == "__main__":
     except Exception as e:
         logging.critical(f"Application crashed: {e}")
         messagebox.showerror("Critical Error", "Application crashed. Please check the logs.")
+
+
+
+check the logs.")
 
 
 

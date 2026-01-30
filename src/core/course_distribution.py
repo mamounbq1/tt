@@ -2,9 +2,9 @@ import sqlite3
 from typing import List, Dict, Tuple, Optional
 from datetime import datetime, timedelta
 import logging
-from course_dist.db_manager import DatabaseManager
+from src.core.db_manager import DatabaseManager
 
-from course_dist.constants import (
+from src.utils.constants import (
     COLORS, MORNING_SLOTS, AFTERNOON_SLOTS, DAYS,
     get_school_year, format_week_text, get_week_dates
 )
@@ -354,9 +354,13 @@ class CourseDistributionManager:
         return result_date
     def is_lunch_break(self, time_slot_id: int) -> bool:
         """Check if the time slot is a lunch break."""
-        # Assuming lunch break time slots are known and can be checked here
-        lunch_break_slots = {}  # Example time slot IDs for lunch break
-        return time_slot_id in lunch_break_slots
+        # Check if the time slot has is_lunch_break flag set
+        self.cursor.execute(
+            "SELECT is_lunch_break FROM time_slots WHERE slot_id = ?",
+            (time_slot_id,)
+        )
+        result = self.cursor.fetchone()
+        return result and result[0] == 1 if result else False
 
 
 

@@ -4,7 +4,7 @@ import sqlite3
 import pandas as pd
 import os
 import logging
-from config import DB_PATH  # Use the shared database path
+from src.utils.config import DB_PATH  # Use the shared database path
 
 class ExcelImporterFrame(ttk.Frame):
     def __init__(self, parent, controller):

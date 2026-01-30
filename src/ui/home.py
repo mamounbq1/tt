@@ -1,8 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import logging, sqlite3
-from course_dist.db_manager import DatabaseManager  # Import DatabaseManager
-from theme_manager import ThemeManager
+from src.core.db_manager import DatabaseManager  # Import DatabaseManager
+from src.core.theme_manager import ThemeManager
 
 
 class LoginFrame(ttk.Frame):
@@ -51,12 +51,9 @@ class LoginFrame(ttk.Frame):
         self.login_entry.focus_set()
 
     def check_login(self):
-        """Handle user login.
+        """Handle user login."""
         login = self.login_entry.get().strip()
-        password = self.password_entry.get().strip()"""
-
-        login = 'admin'
-        password = 'admin'
+        password = self.password_entry.get().strip()
 
         if not login or not password:
             self.show_error("Veuillez remplir tous les champs")

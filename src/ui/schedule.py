@@ -1,9 +1,9 @@
 import tkinter as tk
 from tkinter import ttk, simpledialog, messagebox, filedialog
 import sqlite3
-from pdf_generator import generate_pdf
-from theme_manager import ThemeManager
-from config import DB_PATH  # Import the shared database path
+from src.utils.pdf_generator import generate_pdf
+from src.core.theme_manager import ThemeManager
+from src.utils.config import DB_PATH  # Import the shared database path
 
 class EmploiDuTempsApp(ttk.Frame):
     def __init__(self, parent, controller):
