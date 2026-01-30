@@ -1,12 +1,12 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from course_dist.db_manager import DatabaseManager
+from src.core.db_manager import DatabaseManager
 from datetime import datetime, timedelta
 import logging
 from tkinter import filedialog
-from course_dist.pdf_generator import generate_pdf
-from course_dist.constants import MORNING_SLOTS, AFTERNOON_SLOTS
-from theme_manager import ThemeManager
+from src.utils.pdf_generator import generate_pdf
+from src.utils.constants import MORNING_SLOTS, AFTERNOON_SLOTS
+from src.core.theme_manager import ThemeManager
 import os
 
 class SavedSchedulesFrame(ttk.Frame):

@@ -1,5 +1,5 @@
 import tkinter as tk
-from course_dist.constants import COLORS
+from src.utils.constants import COLORS
 
 class ScheduleGrid:
     def __init__(self, parent, app):

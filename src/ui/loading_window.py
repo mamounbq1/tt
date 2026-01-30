@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-from theme_manager import ThemeManager
+from src.core.theme_manager import ThemeManager
 
 class LoadingWindow:
     def __init__(self, title="Chargement...", message="Veuillez patienter..."):

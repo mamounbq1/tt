@@ -3,12 +3,12 @@ from tkinter import ttk, messagebox, filedialog
 import logging
 import sqlite3
 from datetime import datetime, timedelta
-from db_manager import DatabaseManager
-from constants import (
+from src.core.db_manager import DatabaseManager
+from src.utils.constants import (
     COLORS, MORNING_SLOTS, AFTERNOON_SLOTS, DAYS,
     get_school_year, format_week_text, get_week_dates
 )
-from pdf_generator import generate_pdf
+from src.utils.pdf_generator import generate_pdf
 
 # Configure logging
 logging.basicConfig(

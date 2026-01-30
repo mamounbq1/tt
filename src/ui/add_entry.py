@@ -1,7 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
-from database import create_connection
+import sqlite3
+from src.utils.config import DB_PATH
 
 class AddEntryWindow:
     def __init__(self, root, enseignant):
