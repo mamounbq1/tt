@@ -1,33 +1,86 @@
 """
 Course Distribution Manager for Cahier de Texte
 Handles automatic course distribution based on schedule entries
+WITH COMPREHENSIVE DEBUG LOGGING
 """
 
 import sqlite3
 import logging
+import sys
+import os
 from datetime import datetime, timedelta
 from typing import List, Dict, Tuple, Optional
+
+# Add src to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+from src.utils.debug_logger import DebugLogger, log_function_call, handle_errors
+
+# Initialize debug logger
+logger = DebugLogger('course_distribution')
 
 
 class CourseDistributionManager:
     """Manages automatic course distribution across the school year"""
     
     def __init__(self, db_path: str):
-        self.db_path = db_path
-        self.connection = None
+        """Initialize CourseDistributionManager with database path"""
+        logger.info(f"Initializing CourseDistributionManager with db_path: {db_path}")
+        logger.log_function_entry("__init__", db_path=db_path)
+        
+        try:
+            self.db_path = db_path
+            self.connection = None
+            
+            # Verify database file exists
+            if not os.path.exists(db_path):
+                logger.warning(f"Database file does not exist: {db_path}")
+            else:
+                logger.debug(f"Database file found: {db_path} (size: {os.path.getsize(db_path)} bytes)")
+            
+            logger.info("CourseDistributionManager initialized successfully")
+            logger.log_function_exit("__init__", "Success")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize CourseDistributionManager: {e}")
+            raise
     
     def get_connection(self):
-        """Get database connection"""
-        if self.connection is None:
-            self.connection = sqlite3.connect(self.db_path)
-            self.connection.row_factory = sqlite3.Row
-        return self.connection
+        """Get database connection with debug logging"""
+        logger.debug("get_connection() called")
+        
+        try:
+            if self.connection is None:
+                logger.debug(f"Creating new database connection to: {self.db_path}")
+                self.connection = sqlite3.connect(self.db_path)
+                self.connection.row_factory = sqlite3.Row
+                logger.info("Database connection established successfully")
+            else:
+                logger.debug("Reusing existing database connection")
+            
+            return self.connection
+            
+        except sqlite3.Error as e:
+            logger.error(f"Database connection error: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in get_connection: {e}")
+            raise
     
     def close(self):
-        """Close database connection"""
-        if self.connection:
-            self.connection.close()
-            self.connection = None
+        """Close database connection with debug logging"""
+        logger.debug("close() called")
+        
+        try:
+            if self.connection:
+                logger.debug("Closing database connection")
+                self.connection.close()
+                self.connection = None
+                logger.info("Database connection closed successfully")
+            else:
+                logger.debug("No connection to close")
+        
+        except Exception as e:
+            logger.error(f"Error closing database connection: {e}")
     
     def get_next_course(self, class_id: int, week_number: int, appearance_count: int, school_year: str) -> Optional[int]:
         """
