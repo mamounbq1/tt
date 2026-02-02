@@ -1,0 +1,11 @@
+"""
+Python dependencies for Cahier de Texte application
+"""
+
+# No external dependencies required for basic functionality
+# All features use Python standard library
+
+# Optional dependencies for future enhancements:
+# openpyxl>=3.0.0  # For Excel import/export
+# reportlab>=3.6.0  # For PDF generation
+# pillow>=9.0.0  # For image handling
