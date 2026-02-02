@@ -6,12 +6,13 @@ Handles automatic course distribution based on schedule entries
 import sqlite3
 import logging
 from datetime import datetime, timedelta
+from typing import List, Dict, Tuple, Optional
 
 
 class CourseDistributionManager:
     """Manages automatic course distribution across the school year"""
     
-    def __init__(self, db_path):
+    def __init__(self, db_path: str):
         self.db_path = db_path
         self.connection = None
     
@@ -28,263 +29,223 @@ class CourseDistributionManager:
             self.connection.close()
             self.connection = None
     
-    def get_valid_slots(self, week_number):
+    def get_next_course(self, class_id: int, week_number: int, appearance_count: int, school_year: str) -> Optional[int]:
         """
-        Get all valid time slots for a given week (excluding lunch breaks)
-        Returns list of (day_id, time_slot_id) tuples
+        Get next course ID for a class based on progression
+        
+        Args:
+            class_id: The class identifier
+            week_number: Current week number
+            appearance_count: Number of times this class has appeared in current distribution
+            school_year: The school year (e.g., "2024-2025")
+        
+        Returns:
+            course_id from ma_table or None if no more courses
         """
         conn = self.get_connection()
         cursor = conn.cursor()
         
+        # Get last course from course_progress for this school year
         cursor.execute("""
-            SELECT d.id as day_id, t.id as time_slot_id
-            FROM days d
-            CROSS JOIN time_slots t
-            WHERE t.is_lunch = 0
-            ORDER BY d.display_order, t.display_order
-        """)
-        
-        return [(row['day_id'], row['time_slot_id']) for row in cursor.fetchall()]
-    
-    def get_next_course(self, class_id, week_number, school_year):
-        """
-        Get the next course content for a class
-        Returns (course_id, content) or (None, None) if no more courses
-        """
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        # Get the last course assigned to this class
-        cursor.execute("""
-            SELECT last_course_id
-            FROM course_progress
-            WHERE class_id = ? AND school_year = ?
-        """, (class_id, school_year))
+            SELECT last_course_id 
+            FROM course_progress 
+            WHERE class_id = ? AND school_year = ? AND last_week < ?
+            ORDER BY last_week DESC
+            LIMIT 1
+        """, (class_id, school_year, week_number))
         
         result = cursor.fetchone()
-        last_course_id = result['last_course_id'] if result else None
+        logging.info(f"Found last course for class {class_id}: {result}")
         
-        # Get next course from ma_table
-        if last_course_id is None:
-            # First course for this class
-            cursor.execute("""
-                SELECT id, valeur FROM ma_table
-                ORDER BY id ASC LIMIT 1
-            """)
+        # If no previous course, start with the first course
+        last_course_id = result['last_course_id'] if result else 0
+        
+        # Get all available courses
+        cursor.execute("SELECT id FROM ma_table ORDER BY id")
+        courses = [row['id'] for row in cursor.fetchall()]
+        
+        if not courses:
+            return None
+        
+        # Find the index of the last course ID
+        if last_course_id in courses:
+            last_index = courses.index(last_course_id)
         else:
-            # Next sequential course
-            cursor.execute("""
-                SELECT id, valeur FROM ma_table
-                WHERE id > ?
-                ORDER BY id ASC LIMIT 1
-            """, (last_course_id,))
+            last_index = -1
         
-        course = cursor.fetchone()
-        if course:
-            return course['id'], course['valeur']
+        # Calculate the next course index
+        next_index = last_index + appearance_count + 1
         
-        return None, None
+        # Debug information
+        logging.info(f"""
+            Debug info:
+            - Class: {class_id}
+            - Week: {week_number}
+            - School Year: {school_year}
+            - Last course ID: {last_course_id}
+            - Last index: {last_index}
+            - Appearance count: {appearance_count}
+            - Next index: {next_index}
+        """)
+        
+        # Return next course if available
+        if next_index < len(courses):
+            next_course = courses[next_index]
+            logging.info(f"Next course selected: {next_course}")
+            return next_course
+        return None
     
-    def update_course_progress(self, class_id, course_id, week_number, school_year):
-        """Update the course progress for a class"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        # Check if record exists
-        cursor.execute("""
-            SELECT id FROM course_progress
-            WHERE class_id = ? AND school_year = ?
-        """, (class_id, school_year))
-        
-        if cursor.fetchone():
-            # Update existing record
-            cursor.execute("""
-                UPDATE course_progress
-                SET last_course_id = ?, last_week = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE class_id = ? AND school_year = ?
-            """, (course_id, week_number, class_id, school_year))
-        else:
-            # Insert new record
-            cursor.execute("""
-                INSERT INTO course_progress (class_id, last_course_id, last_week, school_year)
-                VALUES (?, ?, ?, ?)
-            """, (class_id, course_id, week_number, school_year))
-        
-        conn.commit()
+    def get_date_from_day_id(self, week_start, day_id: int):
+        """
+        Convert day_id (1-6) to actual date based on the week's start date.
+        """
+        if isinstance(week_start, datetime):
+            week_start = week_start.date()
+        # Subtract 1 from day_id since timedelta counts from 0
+        result_date = week_start + timedelta(days=day_id - 1)
+        # Ensure we return a date object
+        if isinstance(result_date, datetime):
+            return result_date.date()
+        return result_date
     
-    def is_day_blocked(self, date_str, vacations, holidays, absences):
-        """
-        Check if a date is blocked (vacation, holiday, or absence)
-        date_str format: 'YYYY-MM-DD'
-        """
-        # Check holidays
-        for holiday in holidays:
-            if holiday['date'] == date_str:
-                logging.info(f"Date {date_str} is a holiday: {holiday['label']}")
+    def is_day_in_vacation(self, date, vacation_periods: List[Tuple]) -> bool:
+        """Check if the given date is within any of the vacation periods."""
+        for start_date_str, end_date_str in vacation_periods:
+            # Convert string dates to datetime.date objects
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            
+            if start_date <= date <= end_date:
                 return True
-        
-        # Check vacations
-        for vacation in vacations:
-            start = vacation['start_date']
-            end = vacation['end_date']
-            if start <= date_str <= end:
-                logging.info(f"Date {date_str} is in vacation: {vacation['label']}")
-                return True
-        
-        # Check absences
-        for absence in absences:
-            if absence['date'] == date_str:
-                logging.info(f"Date {date_str} has teacher absence: {absence['reason']}")
-                return True
-        
         return False
     
-    def get_date_from_day_id(self, week_start, day_id):
-        """
-        Convert day_id (1-6) to actual date
-        week_start: datetime object for Monday of the week
-        day_id: 1=Lundi, 2=Mardi, ..., 6=Samedi
-        """
-        return week_start + timedelta(days=day_id - 1)
+    def is_lunch_break(self, time_slot_id: int) -> bool:
+        """Check if the time slot is a lunch break."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "SELECT is_lunch FROM time_slots WHERE id = ?",
+            (time_slot_id,)
+        )
+        result = cursor.fetchone()
+        return result and result['is_lunch'] == 1 if result else False
     
-    def get_week_dates(self, week_number, school_year):
-        """
-        Get start and end dates for a given week number
-        Returns (week_start, week_end) as datetime objects
-        """
-        # School year starts on first Monday of September
-        year_start = int(school_year.split('-')[0])
-        september_first = datetime(year_start, 9, 1)
-        
-        # Find first Monday
-        days_until_monday = (7 - september_first.weekday()) % 7
-        if days_until_monday == 0 and september_first.weekday() != 0:
-            days_until_monday = 7
-        first_monday = september_first + timedelta(days=days_until_monday)
-        
-        # Calculate week start
-        week_start = first_monday + timedelta(weeks=week_number - 1)
-        week_end = week_start + timedelta(days=5)  # Saturday
-        
-        return week_start, week_end
-    
-    def distribute_courses(self, week_number, school_year):
+    def distribute_courses(self, week_number: int, week_start, week_end, school_year: str) -> Dict[int, List[Tuple]]:
         """
         Main distribution algorithm: assign courses to schedule for a given week
-        Returns: (success, message, distribution_data)
+        
+        Args:
+            week_number: Week number (1-36)
+            week_start: Start date of the week
+            week_end: End date of the week
+            school_year: School year (e.g., "2024-2025")
+        
+        Returns:
+            Dictionary mapping class_id to list of (day_id, time_slot_id, course_id) tuples
         """
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        logging.info(f"Starting course distribution for week {week_number}, school year {school_year}")
+        # Fetch all classes
+        cursor.execute("SELECT DISTINCT id FROM classes")
+        classes = [c['id'] for c in cursor.fetchall()]
         
-        # Get week dates
-        week_start, week_end = self.get_week_dates(week_number, school_year)
-        logging.info(f"Week {week_number}: {week_start.strftime('%Y-%m-%d')} to {week_end.strftime('%Y-%m-%d')}")
+        distribution = {class_id: [] for class_id in classes}
+        appearance_count = {class_id: 0 for class_id in classes}
         
-        # Load constraints
-        cursor.execute("SELECT * FROM holidays")
-        holidays = cursor.fetchall()
-        
-        cursor.execute("SELECT * FROM vacations")
-        vacations = cursor.fetchall()
-        
-        cursor.execute("SELECT * FROM absences")
-        absences = cursor.fetchall()
-        
-        # Get fixed schedule entries (which classes at which slots)
+        # Fetch all schedule entries (fixed timetable)
         cursor.execute("""
-            SELECT se.day_id, se.time_slot_id, se.class_id, c.name as class_name
-            FROM schedule_entries se
-            JOIN classes c ON se.class_id = c.id
-            ORDER BY se.day_id, se.time_slot_id
+            SELECT day_id, time_slot_id, class_id 
+            FROM schedule_entries 
+            ORDER BY day_id, time_slot_id
         """)
-        schedule_entries = cursor.fetchall()
+        all_schedule_entries = cursor.fetchall()
         
-        if not schedule_entries:
-            return False, "Aucune entrée d'emploi du temps fixe trouvée. Veuillez d'abord créer l'emploi du temps.", []
+        # Fetch vacation periods
+        cursor.execute("""
+            SELECT start_date, end_date 
+            FROM vacations 
+            WHERE ? BETWEEN start_date AND end_date
+            OR ? BETWEEN start_date AND end_date
+            OR (start_date BETWEEN ? AND ?)
+            OR (end_date BETWEEN ? AND ?)
+        """, (week_start, week_end, week_start, week_end, week_start, week_end))
+        vacation_periods = cursor.fetchall()
         
-        # Clear existing distribution for this week
-        cursor.execute("DELETE FROM schedule_data WHERE week_number = ?", (week_number,))
+        # Format dates for holiday query
+        if isinstance(week_start, datetime):
+            date_param1 = week_start.strftime('%Y-%m-%d')
+        else:
+            date_param1 = week_start
+            
+        if isinstance(week_end, datetime):
+            date_param2 = week_end.strftime('%Y-%m-%d')
+        else:
+            date_param2 = week_end
         
-        distribution_data = []
-        courses_assigned = 0
-        slots_blocked = 0
+        # Fetch holidays
+        cursor.execute("""
+            SELECT date 
+            FROM holidays 
+            WHERE date BETWEEN ? AND ?
+        """, (date_param1, date_param2))
         
-        # Process each scheduled slot
-        for entry in schedule_entries:
+        public_holidays = [datetime.strptime(row['date'], '%Y-%m-%d').date() if isinstance(row['date'], str) 
+                        else row['date'].date() if isinstance(row['date'], datetime) else row['date'] 
+                        for row in cursor.fetchall()]
+        
+        # Fetch absences
+        cursor.execute("""
+            SELECT date 
+            FROM absences 
+            WHERE DATE(date) BETWEEN DATE(?) AND DATE(?)
+        """, (week_start, week_end))
+        absence_days = [row['date'] for row in cursor.fetchall()]
+        
+        # Iterate over schedule entries
+        for entry in all_schedule_entries:
             day_id = entry['day_id']
             time_slot_id = entry['time_slot_id']
             class_id = entry['class_id']
-            class_name = entry['class_name']
             
-            # Get actual date
-            slot_date = self.get_date_from_day_id(week_start, day_id)
-            date_str = slot_date.strftime('%Y-%m-%d')
+            # Calculate actual date for this day_id
+            actual_date = self.get_date_from_day_id(week_start, day_id)
+            if isinstance(actual_date, datetime):
+                actual_date = actual_date.date()
+                    
+            absence_dates = [datetime.strptime(d, '%Y-%m-%d').date() if isinstance(d, str) 
+                            else d.date() if isinstance(d, datetime) else d 
+                            for d in absence_days]
             
-            # Check if day is blocked
-            if self.is_day_blocked(date_str, vacations, holidays, absences):
-                slots_blocked += 1
-                logging.info(f"Slot blocked: {date_str} for {class_name}")
+            # Skip if day is in vacation, public holiday, or absence
+            if self.is_day_in_vacation(actual_date, vacation_periods):
+                logging.info(f"SKIPPING: {actual_date} is during vacation period")
+                continue
+                
+            if actual_date in absence_dates:
+                logging.info(f"SKIPPING: {actual_date} is marked as absence")
+                continue
+                
+            if actual_date in public_holidays:
+                logging.info(f"SKIPPING: {actual_date} is a public holiday")
+                continue
+                
+            logging.info(f"Day {actual_date} is valid - continuing with scheduling")
+            
+            # Skip lunch break
+            if self.is_lunch_break(time_slot_id):
                 continue
             
-            # Get next course for this class
-            course_id, course_content = self.get_next_course(class_id, week_number, school_year)
-            
-            if course_id is None:
-                logging.warning(f"No more courses available for class {class_name}")
-                course_content = "⚠️ Fin du programme"
+            # Assign course to this class
+            course_id = self.get_next_course(class_id, week_number, appearance_count[class_id], school_year)
+            if course_id:
+                distribution[class_id].append((day_id, time_slot_id, course_id))
+                appearance_count[class_id] += 1
             else:
-                # Update progress
-                self.update_course_progress(class_id, course_id, week_number, school_year)
-                courses_assigned += 1
-            
-            # Save to schedule_data
-            cursor.execute("""
-                INSERT OR REPLACE INTO schedule_data (week_number, day_id, slot_id, content, class_id)
-                VALUES (?, ?, ?, ?, ?)
-            """, (week_number, day_id, time_slot_id, course_content, class_id))
-            
-            distribution_data.append({
-                'day_id': day_id,
-                'time_slot_id': time_slot_id,
-                'class_id': class_id,
-                'class_name': class_name,
-                'content': course_content,
-                'date': date_str
-            })
+                distribution[class_id].append((day_id, time_slot_id, "No more courses"))
         
-        conn.commit()
-        
-        message = f"✅ Distribution réussie!\n"
-        message += f"• Cours assignés: {courses_assigned}\n"
-        message += f"• Créneaux bloqués (vacances/absences): {slots_blocked}\n"
-        message += f"• Semaine: {week_start.strftime('%d/%m/%Y')} - {week_end.strftime('%d/%m/%Y')}"
-        
-        logging.info(message)
-        
-        return True, message, distribution_data
-    
-    def get_distribution_summary(self, week_number):
-        """Get summary of distribution for a week"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            SELECT 
-                d.name as day_name,
-                t.start_time || '-' || t.end_time as time_range,
-                c.name as class_name,
-                sd.content
-            FROM schedule_data sd
-            JOIN days d ON sd.day_id = d.id
-            JOIN time_slots t ON sd.slot_id = t.id
-            LEFT JOIN classes c ON sd.class_id = c.id
-            WHERE sd.week_number = ?
-            ORDER BY d.display_order, t.display_order
-        """, (week_number,))
-        
-        return cursor.fetchall()
+        return distribution
     
     def load_sample_courses(self):
         """Load sample course content into ma_table"""
@@ -292,8 +253,8 @@ class CourseDistributionManager:
         cursor = conn.cursor()
         
         # Check if already populated
-        cursor.execute("SELECT COUNT(*) FROM ma_table")
-        if cursor.fetchone()[0] > 0:
+        cursor.execute("SELECT COUNT(*) as count FROM ma_table")
+        if cursor.fetchone()['count'] > 0:
             return False, "ma_table already contains courses"
         
         sample_courses = [
@@ -337,3 +298,23 @@ class CourseDistributionManager:
         conn.commit()
         
         return True, f"{len(sample_courses)} sample courses loaded"
+    
+    def fetch_course_value_by_id(self, course_id):
+        """
+        Fetch course value (text content) from ma_table using course_id
+        
+        Args:
+            course_id: The ID of the course in ma_table
+        
+        Returns:
+            The course text (valeur) or None if not found
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT valeur FROM ma_table WHERE id = ?", (course_id,))
+        result = cursor.fetchone()
+        
+        if result:
+            return result['valeur']
+        return None
