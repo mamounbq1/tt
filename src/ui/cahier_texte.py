@@ -360,7 +360,7 @@ class CahierTexteFrame(ttk.Frame):
             
             # Check if data exists for this week
             self.cursor.execute("""
-                SELECT cell_row, cell_col, value
+                SELECT day_id, slot_id, content
                 FROM schedule_data
                 WHERE week_number = ?
             """, (week_number,))
@@ -382,16 +382,21 @@ class CahierTexteFrame(ttk.Frame):
     def _load_saved_data(self, saved_data):
         """Load saved data into the grid"""
         for row_data in saved_data:
-            row = row_data['cell_row']
-            col = row_data['cell_col']
-            value = row_data['value']
+            day_id = row_data['day_id']
+            slot_id = row_data['slot_id']
+            content = row_data['content']
+            
+            # Convert day_id/slot_id to row/col
+            row = self._get_row_from_time_slot(slot_id)
+            col = day_id
             
             if (row, col) in self.cells and isinstance(self.cells[(row, col)], tuple):
                 text_widget, placeholder, _ = self.cells[(row, col)]
                 if text_widget:
                     text_widget.delete('1.0', tk.END)
-                    text_widget.insert('1.0', value)
+                    text_widget.insert('1.0', content)
                     text_widget.pack(fill='both', expand=True)
+                    placeholder.pack_forget()
                     placeholder.pack_forget()
     
     def _distribute_ma_table_values(self, week_number):
@@ -445,6 +450,20 @@ class CahierTexteFrame(ttk.Frame):
         else:
             return 2 + 4 + 1 + (time_slot_id - 6)
     
+    def _get_slot_id_from_row(self, row):
+        """Map row in grid to time_slot_id (inverse of _get_row_from_time_slot)"""
+        # rows: 2-5 (morning), 6 (lunch), 7-10 (afternoon)
+        # time_slot_id: 1-4 (morning), 5 (lunch), 6-9 (afternoon)
+        if row <= 5:
+            # Morning: row 2-5 → slot_id 1-4
+            return row - 2 + 1
+        elif row == 6:
+            # Lunch
+            return 5
+        else:
+            # Afternoon: row 7-10 → slot_id 6-9
+            return row - 7 + 6
+    
     def save_schedule(self):
         """Save schedule to database"""
         try:
@@ -465,11 +484,15 @@ class CahierTexteFrame(ttk.Frame):
                     if text_widget and text_widget.winfo_ismapped():
                         content = text_widget.get('1.0', tk.END).strip()
                         if content:
+                            # Convert row/col to day_id/slot_id
+                            day_id = col
+                            slot_id = self._get_slot_id_from_row(row)
+                            
                             # Insert new data
                             self.cursor.execute("""
-                                INSERT INTO schedule_data (week_number, cell_row, cell_col, value)
+                                INSERT INTO schedule_data (week_number, day_id, slot_id, content)
                                 VALUES (?, ?, ?, ?)
-                            """, (week_number, row, col, content))
+                            """, (week_number, day_id, slot_id, content))
                             saved_count += 1
             
             self.conn.commit()
