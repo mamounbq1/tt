@@ -20,11 +20,11 @@ from src.core.database import DatabaseManager
 # Import UI frames
 from src.ui.dashboard import DashboardFrame
 from src.ui.add_entry import AddEntryFrame
+from src.ui.schedule import ScheduleFrame
 from src.ui.placeholder_frames import (
     PrintSchedulesFrame,
     ImportContentFrame,
     ConstraintsFrame,
-    ScheduleFrame,
     DistributionFrame
 )
 

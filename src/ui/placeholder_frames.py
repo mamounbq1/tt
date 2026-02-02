@@ -92,34 +92,6 @@ class ConstraintsFrame(ttk.Frame):
         self.controller.show_frame('DashboardFrame')
 
 
-class ScheduleFrame(ttk.Frame):
-    """Frame for viewing and editing schedules"""
-    
-    def __init__(self, parent, controller):
-        super().__init__(parent)
-        self.controller = controller
-        self.build_ui()
-    
-    def build_ui(self):
-        container = ttk.Frame(self, padding=20)
-        container.pack(expand=True, fill='both')
-        
-        back_btn = ThemeManager.create_button(container, text='← Retour', command=self.go_back)
-        back_btn.pack(anchor='nw')
-        
-        title = ThemeManager.create_label(container, text='Emploi du temps', style='Heading.TLabel')
-        title.pack(pady=20)
-        
-        message = ThemeManager.create_label(
-            container,
-            text='Fonctionnalité en développement\nVous pourrez consulter et modifier l\'emploi du temps hebdomadaire'
-        )
-        message.pack(pady=20)
-    
-    def go_back(self):
-        self.controller.show_frame('DashboardFrame')
-
-
 class DistributionFrame(ttk.Frame):
     """Frame for distributing courses automatically"""
     
