@@ -22,11 +22,9 @@ from src.ui.dashboard import DashboardFrame
 from src.ui.add_entry import AddEntryFrame
 from src.ui.schedule import ScheduleFrame
 from src.ui.constraints import ConstraintsFrame
-from src.ui.placeholder_frames import (
-    PrintSchedulesFrame,
-    ImportContentFrame,
-    DistributionFrame
-)
+from src.ui.print_schedules import PrintSchedulesFrame
+from src.ui.import_content import ImportContentFrame
+from src.ui.distribution import DistributionFrame
 
 
 class Application(tk.Tk):
