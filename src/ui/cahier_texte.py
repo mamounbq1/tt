@@ -400,9 +400,10 @@ class CahierTexteFrame(ttk.Frame):
             selected_week = self.week_selector.get()
             week_start = datetime.strptime(selected_week.split("du ")[1].split(" au")[0], "%d/%m/%Y")
             week_end = week_start + timedelta(days=5)
+            school_year = "2024-2025"  # Extract from week or use current
             
             logging.info(f"Distributing courses for week {week_number}...")
-            distribution = self.course_distributor.distribute_courses(week_number, week_start, week_end)
+            distribution = self.course_distributor.distribute_courses(week_number, week_start, week_end, school_year)
             logging.info(f"Distribution result: {distribution}")
             
             for class_id, slots in distribution.items():
