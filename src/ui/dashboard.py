@@ -127,5 +127,5 @@ class DashboardFrame(ttk.Frame):
         self.controller.show_frame('ScheduleFrame')
     
     def open_distribution(self):
-        """Navigate to course distribution frame"""
-        self.controller.show_frame('DistributionFrame')
+        """Navigate to course distribution frame (Cahier de Texte)"""
+        self.controller.show_frame('CahierTexteFrame')

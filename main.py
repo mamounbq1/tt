@@ -25,6 +25,7 @@ from src.ui.constraints import ConstraintsFrame
 from src.ui.print_schedules import PrintSchedulesFrame
 from src.ui.import_content import ImportContentFrame
 from src.ui.distribution import DistributionFrame
+from src.ui.cahier_texte import CahierTexteFrame
 
 
 class Application(tk.Tk):
@@ -118,7 +119,8 @@ class Application(tk.Tk):
             ('ImportContentFrame', ImportContentFrame),
             ('ConstraintsFrame', ConstraintsFrame),
             ('ScheduleFrame', ScheduleFrame),
-            ('DistributionFrame', DistributionFrame)
+            ('DistributionFrame', DistributionFrame),
+            ('CahierTexteFrame', CahierTexteFrame)
         ]
         
         # Create and store each frame
