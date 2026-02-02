@@ -1,13 +1,15 @@
 """
 Distribution Frame
-Automatically distribute courses across the weekly schedule
+Automatically distribute courses across the weekly schedule based on fixed schedule entries
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, scrolledtext
 import logging
+from datetime import datetime
 from src.utils.theme import ThemeManager
 from src.utils.config import DB_PATH
+from src.core.course_distribution import CourseDistributionManager
 
 
 class DistributionFrame(ttk.Frame):
@@ -17,12 +19,21 @@ class DistributionFrame(ttk.Frame):
         super().__init__(parent)
         self.controller = controller
         self.db = controller.database
+        self.dist_manager = CourseDistributionManager(DB_PATH)
         
         self.selected_week = 1
-        self.selected_class = None
+        self.current_year = self.get_current_school_year()
         
         self.build_ui()
-        self.load_classes()
+        self.refresh_status()
+    
+    def get_current_school_year(self):
+        """Get current school year (e.g., '2024-2025')"""
+        now = datetime.now()
+        if now.month >= 9:
+            return f"{now.year}-{now.year + 1}"
+        else:
+            return f"{now.year - 1}-{now.year}"
     
     def build_ui(self):
         """Build the user interface"""
@@ -49,50 +60,50 @@ class DistributionFrame(ttk.Frame):
         title.pack(side='left', padx=20)
         
         # Instructions
-        instructions = ttk.LabelFrame(main_container, text='Instructions', padding=10)
+        instructions = ttk.LabelFrame(main_container, text='📖 Comment ça marche', padding=10)
         instructions.pack(fill='x', pady=(0, 10))
         
-        inst_text = """
-Cette fonctionnalité permet de distribuer automatiquement les cours sur l'emploi du temps.
+        inst_text = """Distribution automatique des cours basée sur l'emploi du temps fixe:
 
-Fonctionnement:
-1. Sélectionnez une classe
-2. Choisissez une semaine
-3. Configurez les paramètres de distribution
-4. Cliquez sur "Distribuer" pour générer automatiquement l'emploi du temps
-        """
+1. Le système utilise "ma_table" (contenu des cours) et "schedule_entries" (emploi du temps fixe)
+2. Pour chaque semaine, il assigne séquentiellement les cours aux créneaux planifiés
+3. Il respecte automatiquement les contraintes: vacances, jours fériés, absences enseignants
+4. Il saute la pause déjeuner (12:30-14:30)
+5. Chaque classe progresse dans le programme de manière séquentielle
+
+Prérequis:
+• Avoir créé l'emploi du temps fixe (schedule_entries)
+• Avoir chargé les cours dans ma_table
+• Avoir défini les classes"""
         
         ttk.Label(
             instructions,
             text=inst_text.strip(),
             font=('Arial', 9),
             justify='left'
-        )        .pack(anchor='w')
+        ).pack(anchor='w')
         
         # Configuration panel
-        config_panel = ttk.LabelFrame(main_container, text='Configuration', padding=10)
+        config_panel = ttk.LabelFrame(main_container, text='⚙️ Configuration', padding=10)
         config_panel.pack(fill='x', pady=(0, 10))
         
-        # Class selection
-        class_frame = ttk.Frame(config_panel)
-        class_frame.pack(fill='x', pady=5)
+        # School year
+        year_frame = ttk.Frame(config_panel)
+        year_frame.pack(fill='x', pady=5)
         
-        ttk.Label(class_frame, text='Classe:', width=15).pack(side='left')
+        ttk.Label(year_frame, text='Année scolaire:', width=20).pack(side='left')
         
-        self.class_var = tk.StringVar()
-        self.class_combo = ttk.Combobox(
-            class_frame,
-            textvariable=self.class_var,
-            state='readonly',
-            width=30
-        )
-        self.class_combo.pack(side='left', padx=5)
+        self.year_var = tk.StringVar(value=self.current_year)
+        year_entry = ttk.Entry(year_frame, textvariable=self.year_var, width=15)
+        year_entry.pack(side='left', padx=5)
+        
+        ttk.Label(year_frame, text='(Format: 2024-2025)', font=('Arial', 8, 'italic')).pack(side='left', padx=5)
         
         # Week selection
         week_frame = ttk.Frame(config_panel)
         week_frame.pack(fill='x', pady=5)
         
-        ttk.Label(week_frame, text='Semaine:', width=15).pack(side='left')
+        ttk.Label(week_frame, text='Semaine:', width=20).pack(side='left')
         
         self.week_var = tk.IntVar(value=1)
         week_spin = ttk.Spinbox(
@@ -104,353 +115,265 @@ Fonctionnement:
         )
         week_spin.pack(side='left', padx=5)
         
-        # Distribution mode
-        mode_frame = ttk.Frame(config_panel)
-        mode_frame.pack(fill='x', pady=5)
+        ttk.Label(week_frame, text='(1-36)', font=('Arial', 8, 'italic')).pack(side='left')
         
-        ttk.Label(mode_frame, text='Mode:', width=15).pack(side='left')
+        # Actions frame
+        actions_frame = ttk.Frame(main_container)
+        actions_frame.pack(fill='x', pady=(0, 10))
         
-        self.mode_var = tk.StringVar(value='auto')
-        mode_combo = ttk.Combobox(
-            mode_frame,
-            textvariable=self.mode_var,
-            state='readonly',
-            width=30
+        ThemeManager.create_button(
+            actions_frame,
+            text='📚 Charger Cours Exemple',
+            command=self.load_sample_courses
+        ).pack(side='left', padx=5)
+        
+        ThemeManager.create_button(
+            actions_frame,
+            text='🔄 Rafraîchir Statut',
+            command=self.refresh_status
+        ).pack(side='left', padx=5)
+        
+        ThemeManager.create_button(
+            actions_frame,
+            text='🎲 DISTRIBUER',
+            command=self.distribute_courses,
+            style='Accent.TButton'
+        ).pack(side='left', padx=5)
+        
+        ThemeManager.create_button(
+            actions_frame,
+            text='📊 Voir Résumé',
+            command=self.show_summary
+        ).pack(side='left', padx=5)
+        
+        # Status panel
+        status_panel = ttk.LabelFrame(main_container, text='📈 Statut du Système', padding=10)
+        status_panel.pack(fill='both', expand=True)
+        
+        self.status_text = scrolledtext.ScrolledText(
+            status_panel,
+            width=80,
+            height=15,
+            font=('Courier', 9),
+            state='disabled'
         )
-        mode_combo['values'] = ('Auto - Distribution équilibrée', 'Manuel - Sélection interactive')
-        mode_combo.current(0)
-        mode_combo.pack(side='left', padx=5)
-        
-        # Subjects configuration
-        subjects_frame = ttk.LabelFrame(main_container, text='Matières à Distribuer', padding=10)
-        subjects_frame.pack(fill='both', expand=True, pady=(0, 10))
-        
-        # Subject list with treeview
-        columns = ('subject', 'hours_per_week')
-        self.subjects_tree = ttk.Treeview(
-            subjects_frame,
-            columns=columns,
-            show='headings',
-            height=8
-        )
-        
-        self.subjects_tree.heading('subject', text='Matière')
-        self.subjects_tree.heading('hours_per_week', text='Heures/Semaine')
-        
-        self.subjects_tree.column('subject', width=300)
-        self.subjects_tree.column('hours_per_week', width=150)
-        
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(
-            subjects_frame,
-            orient='vertical',
-            command=self.subjects_tree.yview
-        )
-        self.subjects_tree.configure(yscrollcommand=scrollbar.set)
-        
-        self.subjects_tree.pack(side='left', fill='both', expand=True)
-        scrollbar.pack(side='right', fill='y')
-        
-        # Add/remove subject buttons
-        subject_btn_frame = ttk.Frame(subjects_frame)
-        subject_btn_frame.pack(side='bottom', fill='x', pady=(5, 0))
-        
-        add_subject_btn = ThemeManager.create_button(
-            subject_btn_frame,
-            text='➕ Ajouter Matière',
-            command=self.add_subject
-        )
-        add_subject_btn.pack(side='left', padx=5)
-        
-        remove_subject_btn = ThemeManager.create_button(
-            subject_btn_frame,
-            text='➖ Retirer',
-            command=self.remove_subject
-        )
-        remove_subject_btn.pack(side='left', padx=5)
-        
-        # Load default subjects
-        self.load_default_subjects()
-        
-        # Action buttons
-        action_bar = ttk.Frame(main_container)
-        action_bar.pack(fill='x', pady=(10, 0))
-        
-        distribute_btn = ThemeManager.create_button(
-            action_bar,
-            text='🎲 Distribuer',
-            command=self.distribute_courses
-        )
-        distribute_btn.pack(side='left', padx=5)
-        
-        preview_btn = ThemeManager.create_button(
-            action_bar,
-            text='👁️ Aperçu',
-            command=self.preview_distribution
-        )
-        preview_btn.pack(side='left', padx=5)
-        
-        clear_btn = ThemeManager.create_button(
-            action_bar,
-            text='🗑️ Effacer Semaine',
-            command=self.clear_week
-        )
-        clear_btn.pack(side='left', padx=5)
-        
-        # Status label
-        self.status_label = ttk.Label(
-            main_container,
-            text='Prêt à distribuer',
-            font=('Arial', 9, 'italic'),
-            foreground='green'
-        )
-        self.status_label.pack(side='bottom', anchor='w', pady=5)
+        self.status_text.pack(fill='both', expand=True)
     
-    def load_classes(self):
-        """Load classes from database"""
+    def refresh_status(self):
+        """Refresh system status display"""
         try:
-            query = "SELECT name FROM classes ORDER BY name"
-            results = self.db.execute_query(query)
+            conn = self.dist_manager.get_connection()
+            cursor = conn.cursor()
             
-            class_names = [row['name'] for row in results]
+            # Count courses in ma_table
+            cursor.execute("SELECT COUNT(*) as count FROM ma_table")
+            course_count = cursor.fetchone()['count']
             
-            if class_names:
-                self.class_combo['values'] = class_names
-                self.class_combo.current(0)
-            else:
-                # Add default classes if none exist
-                default_classes = ['6ème A', '5ème B', '4ème C', '3ème D']
-                self.class_combo['values'] = default_classes
-                self.class_combo.current(0)
-                
-                self.status_label.config(
-                    text='Aucune classe trouvée - Veuillez d\'abord ajouter des classes',
-                    foreground='orange'
-                )
+            # Count schedule entries
+            cursor.execute("SELECT COUNT(*) as count FROM schedule_entries")
+            entry_count = cursor.fetchone()['count']
             
-            logging.info(f"Loaded {len(class_names)} classes for distribution")
+            # Count classes
+            cursor.execute("SELECT COUNT(*) as count FROM classes")
+            class_count = cursor.fetchone()['count']
+            
+            # Get unique weeks distributed
+            cursor.execute("SELECT DISTINCT week_number FROM schedule_data ORDER BY week_number")
+            distributed_weeks = [row['week_number'] for row in cursor.fetchall()]
+            
+            # Count holidays
+            cursor.execute("SELECT COUNT(*) as count FROM holidays")
+            holiday_count = cursor.fetchone()['count']
+            
+            # Count vacations
+            cursor.execute("SELECT COUNT(*) as count FROM vacations")
+            vacation_count = cursor.fetchone()['count']
+            
+            # Build status text
+            status = f"""
+╔══════════════════════════════════════════════════════════════════════╗
+║                    STATUT DU SYSTÈME DE DISTRIBUTION                 ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+📚 CONTENU DES COURS (ma_table)
+   ├─ Nombre de cours disponibles: {course_count}
+   └─ {'✅ Prêt' if course_count > 0 else '⚠️ Aucun cours - Utilisez "Charger Cours Exemple"'}
+
+📅 EMPLOI DU TEMPS FIXE (schedule_entries)
+   ├─ Nombre d'entrées: {entry_count}
+   └─ {'✅ Prêt' if entry_count > 0 else '⚠️ Aucune entrée - Créez l\'emploi du temps d\'abord'}
+
+🏫 CLASSES
+   ├─ Nombre de classes: {class_count}
+   └─ {'✅ Prêt' if class_count > 0 else '⚠️ Aucune classe - Ajoutez des classes d\'abord'}
+
+🚫 CONTRAINTES
+   ├─ Jours fériés: {holiday_count}
+   └─ Périodes de vacances: {vacation_count}
+
+📊 DISTRIBUTION EFFECTUÉE
+   ├─ Semaines distribuées: {len(distributed_weeks)}
+   └─ Numéros: {', '.join(map(str, distributed_weeks)) if distributed_weeks else 'Aucune'}
+
+⚙️ CONFIGURATION ACTUELLE
+   ├─ Année scolaire: {self.year_var.get()}
+   └─ Semaine sélectionnée: {self.week_var.get()}
+
+{'✅ SYSTÈME PRÊT - Vous pouvez distribuer!' if course_count > 0 and entry_count > 0 and class_count > 0 else '⚠️ SYSTÈME NON PRÊT - Vérifiez les prérequis ci-dessus'}
+"""
+            
+            self.status_text.config(state='normal')
+            self.status_text.delete(1.0, tk.END)
+            self.status_text.insert(1.0, status)
+            self.status_text.config(state='disabled')
             
         except Exception as e:
-            logging.error(f"Error loading classes: {e}")
+            logging.error(f"Error refreshing status: {e}")
+            messagebox.showerror("Erreur", f"Erreur lors du rafraîchissement: {e}")
     
-    def load_default_subjects(self):
-        """Load default subject distribution"""
-        default_subjects = [
-            ('Mathématiques', 4),
-            ('Français', 4),
-            ('Histoire-Géographie', 3),
-            ('Sciences (SVT/PC)', 3),
-            ('Anglais', 3),
-            ('Éducation Physique', 2),
-            ('Arts Plastiques', 1),
-            ('Musique', 1),
-        ]
-        
-        for subject, hours in default_subjects:
-            self.subjects_tree.insert('', 'end', values=(subject, hours))
-    
-    def add_subject(self):
-        """Add a subject to distribution list"""
-        dialog = tk.Toplevel(self)
-        dialog.title('Ajouter Matière')
-        dialog.geometry('350x200')
-        dialog.transient(self)
-        dialog.grab_set()
-        
-        # Center dialog
-        dialog.update_idletasks()
-        x = self.winfo_rootx() + (self.winfo_width() - dialog.winfo_width()) // 2
-        y = self.winfo_rooty() + (self.winfo_height() - dialog.winfo_height()) // 2
-        dialog.geometry(f'+{x}+{y}')
-        
-        ttk.Label(dialog, text='Nom de la matière:').pack(pady=5)
-        subject_entry = ttk.Entry(dialog, width=30)
-        subject_entry.pack(pady=5)
-        
-        ttk.Label(dialog, text='Heures par semaine:').pack(pady=5)
-        hours_var = tk.IntVar(value=2)
-        hours_spin = ttk.Spinbox(dialog, from_=1, to=10, textvariable=hours_var, width=10)
-        hours_spin.pack(pady=5)
-        
-        def save():
-            subject = subject_entry.get().strip()
-            hours = hours_var.get()
-            
-            if not subject:
-                messagebox.showwarning("Attention", "Veuillez entrer le nom de la matière")
-                return
-            
-            self.subjects_tree.insert('', 'end', values=(subject, hours))
-            dialog.destroy()
-        
-        btn_frame = ttk.Frame(dialog)
-        btn_frame.pack(pady=10)
-        
-        save_btn = ThemeManager.create_button(btn_frame, text='✓ Ajouter', command=save)
-        save_btn.pack(side='left', padx=5)
-        
-        cancel_btn = ThemeManager.create_button(btn_frame, text='✗ Annuler', command=dialog.destroy)
-        cancel_btn.pack(side='left', padx=5)
-    
-    def remove_subject(self):
-        """Remove selected subject"""
-        selection = self.subjects_tree.selection()
-        if not selection:
-            messagebox.showwarning("Attention", "Veuillez sélectionner une matière à retirer")
-            return
-        
-        for item in selection:
-            self.subjects_tree.delete(item)
+    def load_sample_courses(self):
+        """Load sample courses into ma_table"""
+        if messagebox.askyesno(
+            "Charger des cours exemple",
+            "Cela va charger 30 cours d'exemple dans ma_table.\n\n"
+            "Continuer?"
+        ):
+            try:
+                success, message = self.dist_manager.load_sample_courses()
+                if success:
+                    messagebox.showinfo("Succès", message)
+                    self.refresh_status()
+                else:
+                    messagebox.showwarning("Information", message)
+            except Exception as e:
+                logging.error(f"Error loading sample courses: {e}")
+                messagebox.showerror("Erreur", f"Erreur: {e}")
     
     def distribute_courses(self):
-        """Distribute courses across the week"""
-        # Get configuration
-        selected_class = self.class_var.get()
+        """Execute course distribution for selected week"""
         week = self.week_var.get()
+        school_year = self.year_var.get()
         
-        if not selected_class:
-            messagebox.showwarning("Attention", "Veuillez sélectionner une classe")
+        # Validate year format
+        if not self.validate_school_year(school_year):
+            messagebox.showerror(
+                "Erreur",
+                "Format d'année scolaire invalide.\nUtilisez le format: 2024-2025"
+            )
             return
         
-        # Get subjects
-        subjects = []
-        for item in self.subjects_tree.get_children():
-            values = self.subjects_tree.item(item)['values']
-            subjects.append({'name': values[0], 'hours': values[1]})
-        
-        if not subjects:
-            messagebox.showwarning("Attention", "Veuillez ajouter au moins une matière")
-            return
-        
-        # Confirm distribution
-        total_hours = sum(s['hours'] for s in subjects)
-        result = messagebox.askyesno(
-            "Confirmation",
-            f"Distribuer {total_hours} heures de cours pour {selected_class} sur la semaine {week}?\n\n"
-            f"Attention: Cela écrasera l'emploi du temps existant pour cette semaine."
-        )
-        
-        if not result:
+        # Confirm action
+        if not messagebox.askyesno(
+            "Confirmer Distribution",
+            f"Distribuer les cours pour la semaine {week} de l'année {school_year}?\n\n"
+            f"⚠️ Cela remplacera toute distribution existante pour cette semaine."
+        ):
             return
         
         try:
-            # Get available slots (excluding lunch)
-            days = self.db.execute_query("SELECT id FROM days ORDER BY display_order")
-            slots = self.db.execute_query(
-                "SELECT id FROM time_slots WHERE is_lunch = 0 ORDER BY display_order"
+            # Execute distribution
+            success, message, distribution_data = self.dist_manager.distribute_courses(
+                week, school_year
             )
             
-            # Clear existing schedule for this week
-            delete_query = "DELETE FROM schedule_data WHERE week_number = ?"
-            self.db.execute_update(delete_query, (week,))
-            
-            # Distribute subjects across available slots
-            slot_index = 0
-            available_slots = [(d['id'], s['id']) for d in days for s in slots]
-            
-            for subject in subjects:
-                hours_to_distribute = subject['hours']
+            if success:
+                messagebox.showinfo("Succès", message)
+                self.refresh_status()
+            else:
+                messagebox.showerror("Erreur", message)
                 
-                for _ in range(hours_to_distribute):
-                    if slot_index >= len(available_slots):
-                        messagebox.showwarning(
-                            "Attention",
-                            f"Pas assez de créneaux disponibles.\n"
-                            f"Distribué {slot_index} créneaux sur {total_hours} demandés."
-                        )
-                        break
-                    
-                    day_id, slot_id = available_slots[slot_index]
-                    content = f"{subject['name']}\n{selected_class}"
-                    
-                    insert_query = """
-                        INSERT INTO schedule_data (week_number, day_id, slot_id, content)
-                        VALUES (?, ?, ?, ?)
-                    """
-                    self.db.execute_update(insert_query, (week, day_id, slot_id, content))
-                    
-                    slot_index += 1
-                
-                if slot_index >= len(available_slots):
-                    break
-            
-            self.status_label.config(
-                text=f'Distribution terminée: {slot_index} créneaux attribués',
-                foreground='green'
-            )
-            
-            messagebox.showinfo(
-                "Succès",
-                f"Distribution terminée!\n\n"
-                f"Classe: {selected_class}\n"
-                f"Semaine: {week}\n"
-                f"Créneaux attribués: {slot_index}/{total_hours}"
-            )
-            
-            logging.info(f"Distributed {slot_index} slots for {selected_class} week {week}")
-            
         except Exception as e:
             logging.error(f"Error distributing courses: {e}")
-            messagebox.showerror("Erreur", f"Erreur lors de la distribution:\n{str(e)}")
-            self.status_label.config(text='Erreur lors de la distribution', foreground='red')
+            messagebox.showerror("Erreur", f"Erreur lors de la distribution:\n{e}")
     
-    def preview_distribution(self):
-        """Preview the distribution without saving"""
-        selected_class = self.class_var.get()
+    def show_summary(self):
+        """Show distribution summary for selected week"""
         week = self.week_var.get()
-        
-        if not selected_class:
-            messagebox.showwarning("Attention", "Veuillez sélectionner une classe")
-            return
-        
-        # Get subjects
-        subjects = []
-        for item in self.subjects_tree.get_children():
-            values = self.subjects_tree.item(item)['values']
-            subjects.append({'name': values[0], 'hours': values[1]})
-        
-        if not subjects:
-            messagebox.showwarning("Attention", "Veuillez ajouter au moins une matière")
-            return
-        
-        # Build preview message
-        total_hours = sum(s['hours'] for s in subjects)
-        
-        preview_text = f"Aperçu de la distribution:\n\n"
-        preview_text += f"Classe: {selected_class}\n"
-        preview_text += f"Semaine: {week}\n"
-        preview_text += f"Total: {total_hours} heures\n\n"
-        preview_text += "Matières:\n"
-        
-        for subject in subjects:
-            preview_text += f"  • {subject['name']}: {subject['hours']}h/semaine\n"
-        
-        messagebox.showinfo("Aperçu de la Distribution", preview_text)
-    
-    def clear_week(self):
-        """Clear schedule for selected week"""
-        week = self.week_var.get()
-        
-        result = messagebox.askyesno(
-            "Confirmation",
-            f"Êtes-vous sûr de vouloir effacer l'emploi du temps de la semaine {week}?"
-        )
-        
-        if not result:
-            return
         
         try:
-            delete_query = "DELETE FROM schedule_data WHERE week_number = ?"
-            self.db.execute_update(delete_query, (week,))
+            summary = self.dist_manager.get_distribution_summary(week)
             
-            messagebox.showinfo("Succès", f"Semaine {week} effacée")
-            self.status_label.config(text=f'Semaine {week} effacée', foreground='green')
-            logging.info(f"Cleared week {week}")
+            if not summary:
+                messagebox.showinfo(
+                    "Aucune donnée",
+                    f"Aucune distribution trouvée pour la semaine {week}"
+                )
+                return
+            
+            # Create summary window
+            summary_window = tk.Toplevel(self)
+            summary_window.title(f"Résumé - Semaine {week}")
+            summary_window.geometry("800x600")
+            
+            # Title
+            title_label = ThemeManager.create_label(
+                summary_window,
+                text=f'📊 Résumé de la Distribution - Semaine {week}',
+                style='Heading.TLabel'
+            )
+            title_label.pack(pady=10)
+            
+            # Treeview
+            tree_frame = ttk.Frame(summary_window)
+            tree_frame.pack(fill='both', expand=True, padx=10, pady=10)
+            
+            columns = ('day', 'time', 'class', 'content')
+            tree = ttk.Treeview(tree_frame, columns=columns, show='headings', height=20)
+            
+            tree.heading('day', text='Jour')
+            tree.heading('time', text='Horaire')
+            tree.heading('class', text='Classe')
+            tree.heading('content', text='Contenu')
+            
+            tree.column('day', width=100)
+            tree.column('time', width=120)
+            tree.column('class', width=120)
+            tree.column('content', width=400)
+            
+            # Scrollbar
+            scrollbar = ttk.Scrollbar(tree_frame, orient='vertical', command=tree.yview)
+            tree.configure(yscrollcommand=scrollbar.set)
+            
+            tree.pack(side='left', fill='both', expand=True)
+            scrollbar.pack(side='right', fill='y')
+            
+            # Populate data
+            for row in summary:
+                tree.insert('', 'end', values=(
+                    row['day_name'],
+                    row['time_range'],
+                    row['class_name'] or '-',
+                    row['content'] or '-'
+                ))
+            
+            # Close button
+            ThemeManager.create_button(
+                summary_window,
+                text='Fermer',
+                command=summary_window.destroy
+            ).pack(pady=10)
             
         except Exception as e:
-            logging.error(f"Error clearing week: {e}")
-            messagebox.showerror("Erreur", f"Impossible d'effacer la semaine:\n{str(e)}")
+            logging.error(f"Error showing summary: {e}")
+            messagebox.showerror("Erreur", f"Erreur lors de l'affichage du résumé:\n{e}")
+    
+    def validate_school_year(self, year_str):
+        """Validate school year format (YYYY-YYYY)"""
+        try:
+            parts = year_str.split('-')
+            if len(parts) != 2:
+                return False
+            year1 = int(parts[0])
+            year2 = int(parts[1])
+            return year2 == year1 + 1 and 2000 <= year1 <= 2100
+        except:
+            return False
     
     def go_back(self):
         """Return to dashboard"""
         self.controller.show_frame('DashboardFrame')
+    
+    def __del__(self):
+        """Cleanup"""
+        if hasattr(self, 'dist_manager'):
+            self.dist_manager.close()

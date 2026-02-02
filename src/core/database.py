@@ -194,6 +194,30 @@ class DatabaseManager:
             )
         """)
         
+        # Ma table (main course content repository)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ma_table (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                valeur TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Schedule entries (fixed timetable - which classes at which slots)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS schedule_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                day_id INTEGER NOT NULL,
+                time_slot_id INTEGER NOT NULL,
+                class_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(day_id, time_slot_id),
+                FOREIGN KEY (day_id) REFERENCES days(id),
+                FOREIGN KEY (time_slot_id) REFERENCES time_slots(id),
+                FOREIGN KEY (class_id) REFERENCES classes(id)
+            )
+        """)
+        
         conn.commit()
         logging.info("Database schema created successfully")
     
@@ -277,7 +301,7 @@ class DatabaseManager:
         required_tables = [
             'teachers', 'classes', 'days', 'time_slots', 'courses',
             'homework_entries', 'schedule_data', 'holidays', 'vacations',
-            'absences', 'modules', 'course_progress'
+            'absences', 'modules', 'course_progress', 'ma_table', 'schedule_entries'
         ]
         
         existing_tables = self.get_all_tables()
